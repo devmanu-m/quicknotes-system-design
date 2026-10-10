@@ -41,7 +41,15 @@ function createNoteItem(note) {
   const body = document.createElement("p");
   body.textContent = note.body;
 
-  li.append(title, body);
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.classList.add("delete-btn");
+  deleteBtn.textContent = "Delete";
+  deleteBtn.addEventListener("click", function () {
+    deleteNote(note, deleteBtn);
+  });
+
+  li.append(title, body, deleteBtn);
   return li;
 }
 
@@ -112,6 +120,11 @@ async function createNote(event) {
       body: JSON.stringify({ title: title, body: body, userId: 1 }),
     });
 
+    // JSONPlaceholder does not really save this note, so we mark it as
+    // "local". It also returns id 101 every time, so we never identify
+    // notes by id when deleting; we use the note object itself.
+    result.data.isLocal = true;
+
     notes.unshift(result.data);
     render();
     form.reset();
@@ -124,6 +137,45 @@ async function createNote(event) {
     console.error(error);
   } finally {
     submitBtn.disabled = false;
+  }
+}
+
+// ---------- DELETE: remove a note ----------
+// JSONPlaceholder is a practice API: it accepts DELETE requests but does
+// not change its data, so a deleted note returns after a page reload.
+// Notes created here (isLocal) never existed on the server, so sending
+// DELETE for them would be pointless. We remove those from the page only.
+// Notes loaded from the server get a real DELETE /posts/{id} request, and
+// we remove them from the list only if the request succeeds. In the real
+// QuickNotes API, the server would remove the note permanently.
+async function deleteNote(note, button) {
+  if (note.isLocal) {
+    notes = notes.filter(function (n) {
+      return n !== note;
+    });
+    render();
+    setStatus("Note removed (it only existed on this page).", "success");
+    return;
+  }
+
+  button.disabled = true;
+  setStatus("Deleting note...", "loading");
+
+  try {
+    const result = await request(API_URL + "/" + note.id, {
+      method: "DELETE",
+    });
+
+    notes = notes.filter(function (n) {
+      return n !== note;
+    });
+    render();
+    setStatus(`Note deleted (status ${result.status}).`, "success");
+  } catch (error) {
+    setStatus("Could not delete the note. Please try again.", "error");
+    console.error(error);
+  } finally {
+    button.disabled = false;
   }
 }
 
